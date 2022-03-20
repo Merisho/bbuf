@@ -1,6 +1,7 @@
 package bbuf
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 	"time"
@@ -17,7 +18,8 @@ type BlockingBufferTestSuite struct {
 }
 
 func (ts *BlockingBufferTestSuite) TestNonBlockingWrite() {
-	bb := NewBlockingBuffer(1024)
+	b := bytes.NewBuffer(make([]byte, 0, 1024))
+	bb := New(b)
 
 	n, err := bb.Write(make([]byte, 128))
 	ts.NoError(err)
@@ -25,14 +27,16 @@ func (ts *BlockingBufferTestSuite) TestNonBlockingWrite() {
 }
 
 func (ts *BlockingBufferTestSuite) TestBlockingRead() {
-	bb := NewBlockingBuffer(1024)
+	b := bytes.NewBuffer(make([]byte, 0, 1024))
+	bb := New(b)
 
 	_, err := ts.receiveWithTimeout(ts.asyncRead(bb, 64))
 	ts.EqualError(err, "timeout", "timeout must occur because read must block when buffer is empty")
 }
 
 func (ts *BlockingBufferTestSuite) TestWriteRead() {
-	bb := NewBlockingBuffer(1024)
+	b := bytes.NewBuffer(make([]byte, 0, 1024))
+	bb := New(b)
 
 	_, err := bb.Write(make([]byte, 128))
 	ts.NoError(err)
@@ -50,7 +54,8 @@ func (ts *BlockingBufferTestSuite) TestWriteRead() {
 }
 
 func (ts *BlockingBufferTestSuite) TestWriteWhenReadIsBlocked() {
-	bb := NewBlockingBuffer(1024)
+	b := bytes.NewBuffer(make([]byte, 0, 1024))
+	bb := New(b)
 
 	readRes := ts.asyncRead(bb, 64)
 
@@ -64,7 +69,8 @@ func (ts *BlockingBufferTestSuite) TestWriteWhenReadIsBlocked() {
 }
 
 func (ts *BlockingBufferTestSuite) TestConcurrentReadsUnblockedByConcurrentWrites() {
-	bb := NewBlockingBuffer(1024)
+	b := bytes.NewBuffer(make([]byte, 0, 1024))
+	bb := New(b)
 
 	readRes1 := ts.asyncRead(bb, 64)
 	readRes2 := ts.asyncRead(bb, 64)
@@ -91,7 +97,8 @@ func (ts *BlockingBufferTestSuite) TestConcurrentReadsUnblockedByConcurrentWrite
 }
 
 func (ts *BlockingBufferTestSuite) TestBufferOverflow() {
-	bb := NewBlockingBuffer(16)
+	b := bytes.NewBuffer(make([]byte, 0, 16))
+	bb := New(b)
 
 	n, err := bb.Write(make([]byte, 16))
 	ts.NoError(err)
@@ -100,6 +107,19 @@ func (ts *BlockingBufferTestSuite) TestBufferOverflow() {
 	n, err = bb.Write(make([]byte, 16))
 	ts.Error(err, "buffer overflow")
 	ts.Equal(0, n)
+}
+
+func (ts *BlockingBufferTestSuite) TestBytesBufferWithNilBytesSlice() {
+	b := bytes.NewBuffer(nil)
+	bb := New(b)
+
+	n, err := bb.Write([]byte{10: 0})
+	ts.Zero(n)
+	ts.Error(err, "buffer overflow")
+
+	n, err = ts.receiveWithTimeout(ts.asyncRead(bb, 1))
+	ts.Zero(n)
+	ts.Error(err, "timeout")
 }
 
 type readResult struct {

@@ -1,8 +1,8 @@
 package bbuf
 
 import (
-	"bytes"
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -11,11 +11,17 @@ var (
 	ErrBufferOverflow = errors.New("buffer overflow")
 )
 
-// NewBlockingBuffer constructs BlockingBuffer
-func NewBlockingBuffer(size int) *BlockingBuffer {
+type Buffer interface {
+	io.ReadWriter
+
+	Len() int
+	Cap() int
+}
+
+// New constructs BlockingBuffer
+func New(buf Buffer) *BlockingBuffer {
 	bb := &BlockingBuffer{
-		buf:     bytes.NewBuffer(make([]byte, 0, size)),
-		size:    size,
+		buf:     buf,
 		bufCond: sync.NewCond(&sync.Mutex{}),
 	}
 	return bb
@@ -25,7 +31,7 @@ func NewBlockingBuffer(size int) *BlockingBuffer {
 // In case buffer is empty, reads will block.
 // In case buffer is full, writes will return ErrBufferOverflow
 type BlockingBuffer struct {
-	buf     *bytes.Buffer
+	buf     Buffer
 	bufCond *sync.Cond
 	size    int
 }
@@ -50,7 +56,7 @@ func (bb *BlockingBuffer) Write(b []byte) (int, error) {
 	defer bb.bufCond.L.Unlock()
 	defer bb.bufCond.Broadcast()
 
-	if bb.buf.Len()+len(b) > bb.size {
+	if bb.buf.Len()+len(b) > bb.buf.Cap() {
 		return 0, ErrBufferOverflow
 	}
 
