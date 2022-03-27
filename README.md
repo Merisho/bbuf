@@ -23,6 +23,6 @@ go func() {
 
 data := make([]byte, 4 * 1024)
 fmt.Println("reading...")
-n, err := bb.Read(data) // blocks until buffer does not have data
+n, err := bb.Read(data) // blocks until buffer has data
 fmt.Println("read", n, err, data[0], data[4 * 1024 - 1]) // read 4096 <nil> 1 1
 ```
