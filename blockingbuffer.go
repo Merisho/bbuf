@@ -9,6 +9,8 @@ import (
 var (
 	// ErrBufferOverflow indicates that buffer cannot be written to because current buffer bytes + bytes to write > max buffer size
 	ErrBufferOverflow = errors.New("buffer overflow")
+
+	ErrBufferClosed = errors.New("buffer closed")
 )
 
 type Buffer interface {
@@ -40,20 +42,31 @@ type BlockingBuffer struct {
 // In case buffer is empty, the Read will block
 func (bb *BlockingBuffer) Read(b []byte) (int, error) {
 	bb.bufCond.L.Lock()
-	for bb.buf.Len() == 0 {
+	for bb.buf != nil && bb.buf.Len() == 0 {
 		bb.bufCond.Wait()
 	}
+
+	defer bb.bufCond.L.Unlock()
+
+	if bb.buf == nil {
+		return 0, io.EOF
+	}
+
 	n, err := bb.buf.Read(b)
-	bb.bufCond.L.Unlock()
 
 	return n, err
 }
 
 // Write writes to the buffer.
-// In case buffer is full, the Write will return ErrBufferOverflow
+// In case buffer is full, Write will return ErrBufferOverflow
 func (bb *BlockingBuffer) Write(b []byte) (int, error) {
 	bb.bufCond.L.Lock()
 	defer bb.bufCond.L.Unlock()
+
+	if bb.buf == nil {
+		return 0, ErrBufferClosed
+	}
+
 	defer bb.bufCond.Broadcast()
 
 	if bb.buf.Len()+len(b) > bb.buf.Cap() {
@@ -61,4 +74,15 @@ func (bb *BlockingBuffer) Write(b []byte) (int, error) {
 	}
 
 	return bb.buf.Write(b)
+}
+
+// Close closes the buffer and makes it unusable
+func (bb *BlockingBuffer) Close() error {
+	bb.bufCond.L.Lock()
+	defer bb.bufCond.L.Unlock()
+	defer bb.bufCond.Broadcast()
+
+	bb.buf = nil
+
+	return nil
 }

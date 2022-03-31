@@ -3,6 +3,7 @@ package bbuf
 import (
 	"bytes"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -120,6 +121,29 @@ func (ts *BlockingBufferTestSuite) TestBytesBufferWithNilBytesSlice() {
 	n, err = ts.receiveWithTimeout(ts.asyncRead(bb, 1))
 	ts.Zero(n)
 	ts.Error(err, "timeout")
+}
+
+func (ts *BlockingBufferTestSuite) TestCloseBuffer() {
+	b := bytes.NewBuffer(nil)
+	bb := New(b)
+
+	read1 := ts.asyncRead(bb, 10)
+	read2 := ts.asyncRead(bb, 10)
+
+	err := bb.Close()
+	ts.Require().NoError(err)
+
+	n, err := ts.receiveWithTimeout(read1)
+	ts.Require().Zero(n)
+	ts.Require().Equal(io.EOF, err)
+
+	n, err = ts.receiveWithTimeout(read2)
+	ts.Require().Zero(n)
+	ts.Require().Equal(io.EOF, err)
+
+	n, err = bb.Write([]byte{1})
+	ts.Require().Zero(n)
+	ts.Require().Equal(ErrBufferClosed, err)
 }
 
 type readResult struct {
